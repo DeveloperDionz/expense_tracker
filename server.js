@@ -1,7 +1,6 @@
-const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
-const mysql = require('mysql2');
+const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 
 const app = express();
@@ -22,22 +21,17 @@ app.use(session({
     }
 }));
 
-// MySQL connection setup
-const pool = mysql.createPool({
-    host: 'sql8.freemysqlhosting.net',
-    user: 'sql8728307',
-    password: 'y6RcfWXvnf',
-    database: 'sql8728307',
-    port: 3306,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
+// PostgreSQL connection setup
+const pool = new Pool({
+    connectionString: 'postgresql://root:zMxf74EyitnXV0jD563ogDl4Q1BroWBC@dpg-cqrpb7lumphs73colb60-a.singapore-postgres.render.com/budget_tracker_m462',
+    ssl: {
+        rejectUnauthorized: false
+    }
 });
 
-// Test the connection
-pool.getConnection((err) => {
+pool.connect((err) => {
     if (err) throw err;
-    console.log('Connected to MySQL');
+    console.log('Connected to PostgreSQL');
 });
 
 // User Registration
@@ -45,7 +39,7 @@ app.post('/register', async (req, res) => {
     const { username, password } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    pool.query('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword], (err) => {
+    pool.query('INSERT INTO users (username, password) VALUES ($1, $2)', [username, hashedPassword], (err) => {
         if (err) {
             console.error(err);
             return res.send('User registration failed');
@@ -58,11 +52,11 @@ app.post('/register', async (req, res) => {
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
 
-    pool.query('SELECT * FROM users WHERE username = ?', [username], async (err, results) => {
+    pool.query('SELECT * FROM users WHERE username = $1', [username], async (err, results) => {
         if (err) throw err;
 
-        if (results.length > 0) {
-            const user = results[0];
+        if (results.rows.length > 0) {
+            const user = results.rows[0];
             const passwordMatch = await bcrypt.compare(password, user.password);
 
             if (passwordMatch) {
@@ -83,11 +77,11 @@ app.get('/dashboard.html', (req, res, next) => {
 
     const userId = req.session.user.id;
 
-    pool.query('SELECT * FROM expenses WHERE user_id = ?', [userId], (err, results) => {
+    pool.query('SELECT * FROM expenses WHERE user_id = $1', [userId], (err, results) => {
         if (err) throw err;
 
         console.log('Fetching dashboard data for user:', req.session.user);
-        res.render('dashboard', { expenses: results, user: req.session.user });
+        res.render('dashboard', { expenses: results.rows, user: req.session.user });
     });
 });
 
@@ -106,5 +100,5 @@ app.get('/logout', (req, res) => {
 
 // Start the server
 app.listen(port, () => {
-    console.log(`Server running on port:${port}`);
+    console.log(Server running on port:${port});
 });
